@@ -1,0 +1,83 @@
+<head>
+  <!-- Plotly.js -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+
+<body>
+  <!-- Plotly chart will be drawn inside this DIV -->
+  <div>
+    <div id="mag"></div>
+  </div>
+  <div>
+    <button id="start">Start</button>
+    <button id="reset">Reset</button>
+  </div>
+  <script>
+    const mag = document.getElementById('mag');
+
+    function makeData(color) {
+      return {
+        x: [0], y: [0], z: [0],
+        mode: 'markers',
+        marker: {
+          size: 8,
+          color: color,
+        },
+        type: 'scatter3d',
+        dragmode: true,
+        responsive: true,
+      }
+    }
+
+    Plotly.newPlot(mag, [makeData('red')]);
+
+    let counter = 0;
+    document.querySelector('#reset').addEventListener('click', (e) => {
+      e.preventDefault();
+      Plotly.react(mag, [makeData('red')]);
+      counter = 0;
+    });
+
+    document.querySelector('#start').addEventListener('click', (e) => {
+      e.preventDefault();
+      navigator.serial.requestPort().then(async port => {
+        await port.open({ baudRate: 115200 });
+        while (port.readable) {
+          const reader = port.readable.getReader();
+          let text = '';
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) {
+                // |reader| has been canceled.
+                break;
+              }
+              text += new TextDecoder().decode(value);
+              if (text.indexOf('\n') !== -1) {
+                if (text.startsWith('{')) {
+                  counter++;
+                  const data = JSON.parse(text);
+                  console.log(data);
+                  Plotly.extendTraces('mag', {
+                    y: [[data.Y]],
+                    x: [[data.X]],
+                    z: [[data.Z]]
+                  }, [0])
+                }
+                text = '';
+              }
+            }
+          } catch (error) {
+            // Handle |error|...
+          } finally {
+            reader.releaseLock();
+          }
+        }
+      })
+    })
+
+    function unpack(rows, key) {
+      return rows.map(function (row) { return row[key]; });
+    }
+  </script>
+</body>
